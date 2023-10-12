@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from basenet.MRCB import Multi_Rotation_Convolution_Block_light
-from basenet.MRCB import Modified_Multi_Rotation_Convolution_Block
+from basenet.extractor import Multi_Rotation_Convolution_Block_light
+from basenet.extractor import Modified_Multi_Rotation_Convolution_Block
 
 def norm(out_dim, groups=0):
     if groups == 0:
@@ -99,7 +99,7 @@ def make_kp_layer(cnv_dim, curr_dim, out_dim):
 
 def make_MRCB_layer(curr_dim):
     return nn.Sequential(
-        Multi_Rotation_Convolution_Block_light(curr_dim),
+        Modified_Multi_Rotation_Convolution_Block(curr_dim),
     )
 
 def make_head_layer(curr_dim, out_dim):

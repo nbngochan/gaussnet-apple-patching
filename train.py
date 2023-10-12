@@ -4,7 +4,6 @@ import time
 import argparse
 import yaml
 import torch
-import torch.nn as nn
 import datetime
 import torch.optim as optim
 
@@ -12,7 +11,7 @@ from torch.utils.data import DataLoader
 from lightning_fabric.utilities.seed import seed_everything
 
 from basenet.model import Model_factory
-from data_loader import AppleDataset
+from loader import AppleDataset
 from loss import SWM_FPEM_Loss
 from utils.lr_scheduler import WarmupPolyLR
 from utils.augmentations import Transform
@@ -28,15 +27,15 @@ def get_args():
     parser.add_argument('--input_size', type=int, default=512, help='Input size')
     parser.add_argument('--workers', default=4, type=int, help='Number of workers')
     parser.add_argument('--batch_size', type=int, default=4, help='Training batch size')
-    parser.add_argument('--backbone', type=str, default='hourglass104_MRCB_cascade', 
-                        help='[hourglass104_MRCB_cascade, hourglass104_MRCB, hhrnet48, DLA_dcn, uesnet101_dcn]')
+    parser.add_argument('--backbone', type=str, default='gaussnet_cascade', 
+                        help='[gaussnet_cascade, gaussnet]')
     parser.add_argument('--epochs', type=int, default=2, help='number of train epochs')
     parser.add_argument('--lr', type=float, default=2.5e-4, help='learning rate')
     parser.add_argument('--resume', default=None, type=str,  help='training restore')
     parser.add_argument('--print_freq', default=64, type=int, help='interval of showing training conditions')
     parser.add_argument('--train_iter', default=1, type=int, help='number of total iterations for training')
     parser.add_argument('--curr_iter', default=1, type=int, help='current iteration')
-    parser.add_argument('--alpha', type=float, default=0.5, help='weight for positive loss, default=0.5')
+    parser.add_argument('--alpha', type=float, default=0.8, help='weight for positive loss, default=0.5')
     parser.add_argument('--amp', action='store_true', help='half precision')
     parser.add_argument('--save_path', type=str, default='./weight', help='Model save path')
     parser.add_argument("--trained", default=None, help='Path to pre-trained model')
@@ -61,7 +60,7 @@ def main():
     # Set cuda device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    NUM_CLASSES = {'apple_1': 1, 'apple_2': 2, 'apple_5': 5, 'sodad': 9}
+    NUM_CLASSES = {'apple_1': 1, 'apple_2': 2, 'sodad': 9}
     num_classes = NUM_CLASSES[args.dataset]
     
     # Check and load pretrained model
@@ -74,7 +73,7 @@ def main():
     model = Model_factory(args.backbone, num_classes).to(device)
     
     transform_train = Transform(is_train=True, size=args.input_size)
-    transform_valid = Transform(is_train=True, size=args.input_size)
+    transform_valid = Transform(is_train=False, size=args.input_size)
 
     """"Apple Dataset"""
     # Training data loader
@@ -190,7 +189,6 @@ def train(train_loader, model, criterion, optimizer, scheduler, summary_writer, 
         scheduler.step()
         
         losses.update(loss.item())
-        temp_loss.append(loss.item())
         batch_time.update(time.time() - end)
         end = time.time()
         
@@ -213,8 +211,6 @@ def validate(valid_loader, model, criterion, device, epoch, summary_writer, log_
     
     # evaluation mode, no gradient calculation
     model.eval()
-    temp_loss = []
-    temp_dist = []
     end = time.time()
     
     for x, y, w, s in valid_loader:
@@ -233,15 +229,12 @@ def validate(valid_loader, model, criterion, device, epoch, summary_writer, log_
             loss = criterion(y, outs, w, s)
 
         # measure accuracy and record loss
-        # import pdb; pdb.set_trace()
         if len(y.shape) == 3:
             y = y.unsqueeze(3)
         dist = torch.sqrt((y - outs)**2).mean()
     
         losses.update(loss.item())
         distances.update(dist.item())
-        temp_loss.append(loss.item())
-        temp_dist.append(dist.item())
         
     valid_log = "\n============== validation ==============\n"
     valid_log += "valid time : %.1f s | " % (time.time() - end)

@@ -1,9 +1,9 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from data_loader import AppleDataset
+from loader import AppleDataset
 from torch.utils.data import DataLoader
-
+from utils.augmentations import Transform
 
 class SWM_FPEM_Loss(nn.Module):
     """
@@ -66,8 +66,12 @@ class SWM_FPEM_Loss(nn.Module):
 
 if __name__ == '__main__':
     loss = SWM_FPEM_Loss(2, 0.1, 1/3)
+    
+    transform_train = Transform(is_train=True, size=(512, 512))
     appledata = AppleDataset(mode='train',
-                             data_path='D:/mnt/data_source/cropped-apple-bb/')
+                             data_path='/root/data/apple/cropped-apple-bb/',
+                             img_size=(512, 512),
+                             transform=transform_train)
     apple_loader = DataLoader(appledata, batch_size=32, shuffle=False)
     for batch in apple_loader:
         images, masks, areas, total_sizes = batch
