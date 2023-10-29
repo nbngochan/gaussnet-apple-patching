@@ -1,8 +1,13 @@
 import numpy as np
 import cv2
 import os
+import torch
 import json
 import PIL.Image as Image
+from sklearn.metrics import auc
+import math
+
+
 
 APPLE_CLASSES = ['defective', 'normal']
 COLORS = [(0, 128, 0),  # Green
@@ -10,6 +15,10 @@ COLORS = [(0, 128, 0),  # Green
             (0, 0, 255),  # Blue
             (255, 255, 0),  # Yellow
             (128, 0, 128)]  # Purple
+
+
+def is_nan(value):
+    return math.isnan(float(value))
 
 
 def im2double(img):
@@ -199,6 +208,95 @@ def get_mask(img_name):
     img = np.array(img)
     
     return img, mask, area, sum_size
+
+
+from torchvision.ops import box_iou
+
+def calculate_mAP(predicted_boxes, predicted_labels, ground_truth_boxes, ground_truth_labels, iou_threshold):
+  """
+  Calculates the mAP score for each class.
+
+  Args:
+    predicted_boxes: A torch tensor of predicted bounding boxes in xyxy format.
+    predicted_labels: A torch tensor of predicted labels.
+    ground_truth_boxes: A torch tensor of ground truth bounding boxes in xyxy format.
+    ground_truth_labels: A torch tensor of ground truth labels.
+
+  Returns:
+    A dictionary of mAP scores for each class.
+  """
+
+  num_classes = predicted_labels.max().item() + 1
+  mAP_scores = {}
+
+  for c in range(num_classes):
+    # Filter predicted and ground truth boxes and labels for class c
+    class_mask_pred = predicted_labels == c
+    class_mask_gt = ground_truth_labels == c
+    pred_boxes_c = predicted_boxes[class_mask_pred]
+    gt_boxes_c = ground_truth_boxes[class_mask_gt]
+
+    # Calculate IoU between predicted and ground truth boxes
+    iou = box_iou(pred_boxes_c, gt_boxes_c)
+
+    # Sort predicted boxes by confidence score (descending order)
+    # sorted_indices = torch.argsort(-pred_boxes_c[:, 4])
+    # pred_boxes_c = pred_boxes_c[sorted_indices]
+    # iou = iou[sorted_indices]
+
+    # Calculate precision and recall
+    num_pred = pred_boxes_c.size(0)
+    true_positives = torch.zeros(num_pred)
+    false_positives = torch.zeros(num_pred)
+    total_gt_boxes = gt_boxes_c.size(0)
+
+    # Compute TP and FP for class c in term of IoU threshold
+    if isinstance(iou_threshold, float):
+        for i in range(num_pred):
+            if iou.size(1) != 0:
+                if iou[i].max().item() >= iou_threshold:
+                    true_positives[i] = 1
+                    iou[i, iou[i].argmax()] = -1
+                else:
+                    false_positives[i] = 1
+
+                
+    elif iou_threshold is None:
+        thresholds = torch.arange(0.5, 1.0, 0.05)
+        for i in range(total_gt_boxes):
+            max_iou = torch.tensor(-1.0)
+            iou_i = iou[:, i]
+            if iou_i.numel() > 0:
+                
+                max_iou, max_idx = iou_i.max(dim=0)
+                for threshold in thresholds:
+                    mask = (max_iou >= threshold) & (max_idx == i)
+                    num_masked = mask.sum().item()
+                    if num_masked > 0:
+                        true_positives[mask] = 1
+                        max_iou[mask] = -1
+                false_positives += (max_iou >= 0).float()
+
+
+    cum_true_positives = torch.cumsum(true_positives, dim=0)
+    cum_false_positives = torch.cumsum(false_positives, dim=0)
+    precision = cum_true_positives / (cum_true_positives + cum_false_positives + 1e-10)
+    recall = cum_true_positives / total_gt_boxes
+
+    # Calculate Average Precision (AP)
+    recall = torch.cat((torch.zeros(1), recall, torch.ones(1)))
+    precision = torch.cat((torch.zeros(1), precision, torch.zeros(1)))
+    for i in range(precision.size(0) - 1, 0, -1):
+      precision[i - 1] = torch.max(precision[i - 1], precision[i])
+
+    # Calculate mAP score for class c
+    ap = torch.sum((recall[1:] - recall[:-1]) * precision[1:])
+
+    # Save the AP score for class c in the dictionary
+    mAP_scores[c] = ap.item()
+
+  return mAP_scores
+
 
 if __name__ == '__main__':
     kernel_option = {1: 'gaussian', 2: 'tricube'}
