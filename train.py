@@ -12,6 +12,7 @@ from lightning_fabric.utilities.seed import seed_everything
 
 from basenet.model import Model_factory
 from loader import AppleDataset
+from loader import ListAppleDataset
 from loss import SWM_FPEM_Loss
 from utils.lr_scheduler import WarmupPolyLR
 from utils.augmentations import Transform
@@ -42,7 +43,7 @@ def get_args():
     parser.add_argument("--store_path", default=None, help='Path to save trained model')
     
     args = parser.parse_args()
-    
+    print(args)
     return args
     
 def main():
@@ -60,7 +61,7 @@ def main():
     # Set cuda device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    NUM_CLASSES = {'apple_1': 1, 'apple_2': 2, 'sodad': 9}
+    NUM_CLASSES = {'apple_1': 1, 'apple_2': 2, 'sodad': 9, 'version-2': 3}
     num_classes = NUM_CLASSES[args.dataset]
     
     # Check and load pretrained model
@@ -75,15 +76,28 @@ def main():
     transform_train = Transform(is_train=True, size=args.input_size)
     transform_valid = Transform(is_train=False, size=args.input_size)
 
-    """"Apple Dataset"""
+    # """"Apple Dataset [OLD]"""
+    # # Training data loader
+    # train_dataset = AppleDataset('train', args.root, 
+    #                              args.input_size, transform=transform_train)
+    # train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+    #                         num_workers=args.workers, pin_memory=True)
+    
+    # # Validation data loader
+    # valid_dataset = AppleDataset('valid', args.root,
+    #                             args.input_size, transform=transform_valid)
+    # valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
+    #                         num_workers=args.workers, pin_memory=True)
+    
+    """"Apple Dataset [NEW]"""
     # Training data loader
-    train_dataset = AppleDataset('train', args.root, 
+    train_dataset = ListAppleDataset('train', args.dataset, args.root, 
                                  args.input_size, transform=transform_train)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, pin_memory=True)
     
     # Validation data loader
-    valid_dataset = AppleDataset('valid', args.root,
+    valid_dataset = ListAppleDataset('valid', args.dataset, args.root,
                                 args.input_size, transform=transform_valid)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
                             num_workers=args.workers, pin_memory=True)

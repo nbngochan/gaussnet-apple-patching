@@ -7,9 +7,7 @@ import PIL.Image as Image
 from sklearn.metrics import auc
 import math
 
-
-
-APPLE_CLASSES = ['defective', 'normal']
+APPLE_CLASSES = ['blight', 'scratch', 'normal']
 COLORS = [(0, 128, 0),  # Green
             (255, 0, 0),  # Red
             (0, 0, 255),  # Blue
