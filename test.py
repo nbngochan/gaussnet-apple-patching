@@ -23,8 +23,8 @@ parser.add_argument('--checkpoint', type=str, help='Tranined checkpoint')
 parser.add_argument('--experiment', default=1, type=int, help='number of experiment')
 parser.add_argument('--input_size', default=512, type=int, help='input size')
 parser.add_argument('--c_thresh', default=0.1, type=float, help='threshold for center point')
-parser.add_argument('--backbone', type=str, default='hourglass104_MRCB_cascade', 
-                        help='[hourglass104_MRCB_cascade, hourglass104_MRCB, hhrnet48, DLA_dcn, uesnet101_dcn]')
+parser.add_argument('--backbone', type=str, default='gaussnet_cascade', 
+                        help='[gaussnet_cascade, gaussnet]')
 parser.add_argument('--kernel', default=3, type=int, help='kernel of max-pooling for center point')
 parser.add_argument('--scale', default=1, type=float, help='scale factor')
 
@@ -32,7 +32,7 @@ arg = parser.parse_args()
 print(arg)
 
 
-result_img_path = 'img-out/'
+result_img_path = 'img-out-3/'
 if not os.path.exists(result_img_path):
     os.makedirs(result_img_path)
     
@@ -44,7 +44,7 @@ test_dataset = ListAppleDataset('valid', arg.dataset, arg.root,
                             arg.input_size, transform=None, evaluation=True)
    
 """Network Backbone"""
-NUM_CLASSES = {'apple_1': 1, 'apple_2': 2, 'sodad': 9, 'version-2': 3}
+NUM_CLASSES = {'version-1' : 2, 'version-2': 3, 'version-3': 2}
 num_classes = NUM_CLASSES[arg.dataset]
 model = Model_factory(arg.backbone, num_classes)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -77,8 +77,8 @@ all_preds = []
 all_targets = []
 
 
-# for idx in range(len(test_dataset)):
-for idx in range(50):
+for idx in range(len(test_dataset)):
+# for idx in range(50):
     image, image_path, ground_truth = test_dataset.__getitem__(idx)
     image_name = os.path.basename(image_path).split('.')[0]
     print(image_name)    
@@ -127,7 +127,7 @@ for idx in range(50):
     t3 = time.time()
     
     _img = image.copy()
-    
+    _img_gt = image.copy()
     
     # Predicted value
     pred_boxes = []
@@ -167,10 +167,13 @@ for idx in range(50):
     
     for box in ground_truth:
         label = int(box[8])
+        color = COLORS[label]
         
         box = np.array(box[:8], dtype=np.float32).reshape(-1, 2)
         target_wh = np.array([[w/org_w, h/org_h]], dtype=np.float32)
         box = box * np.tile(target_wh, (4,1))
+        
+        _img_gt = cv2.drawContours(_img_gt, [box.astype(np.int0)], -1, color, 2)
         
         xmin = np.min(box[:, 0])
         ymin = np.min(box[:, 1])
@@ -200,13 +203,13 @@ for idx in range(50):
     merge_out = cv2.resize(merge_out, (w, h))  # image with bounding box prediction
     binary = cv2.resize(binary, (w, h))  # binary image with thresholding
     
-    result_img = cv2.hconcat([_img[:, :, ::-1], merge_out, binary])
+    result_img = cv2.hconcat([_img_gt[:, :, ::-1], _img[:, :, ::-1], merge_out, binary])
 
     cv2.imwrite("%s/%s.jpg" % (result_img_path, image_name), result_img)
 
-import pdb; pdb.set_trace()
+
 # Calculate mAP
-metric = MeanAveragePrecision(iou_type="bbox")
+metric = MeanAveragePrecision(class_metrics=True)
 metric.update(all_preds, all_targets)
 mAP = metric.compute()
 print("Mean Average Precision (mAP):", mAP)

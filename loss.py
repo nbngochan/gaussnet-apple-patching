@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from loader import AppleDataset
+from loader import ListAppleDataset
 from torch.utils.data import DataLoader
 from utils.augmentations import Transform
 

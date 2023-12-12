@@ -33,6 +33,7 @@ def get_center_point_contour(output, thresh, scale, org_size):
                 cy = int(M["m01"] / M["m00"])
                 
                 x, y, w, h = cv2.boundingRect(cnt)
+                
                 x = x * org_w / width
                 y = y * org_h / height
                 w = w * org_w / width
@@ -50,7 +51,17 @@ def get_center_point_contour(output, thresh, scale, org_size):
                 x = center_x - scaled_w / 2
                 y = center_y - scaled_h / 2
                 
-                box = [(x, y), (x + scaled_w, y), (x + scaled_w, y + scaled_h), (x, y + scaled_h)]
+                # 8 point corner
+                x1 = min(org_w, max(0, x))
+                y1 = min(org_h, max(0, y))
+                x2 = min(org_w, max(0, x + scaled_w))
+                y2 = min(org_h, max(0, y))
+                x3 = min(org_w, max(0, x + scaled_w))
+                y3 = min(org_h, max(0, y + scaled_h))  
+                x4 = min(org_w, max(0, x))
+                y4 = min(org_h, max(0, y + scaled_h))
+                                                
+                box = [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
                 
                 results.append({"conf" : max(0.0, min(1.0, output[cy, cx, cls])),
                                "rbox" : box, 
