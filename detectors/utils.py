@@ -211,9 +211,10 @@ class AppleRead(Dataset):
 
 
 class AppleBlightScratch(Dataset):
-    def __init__(self, mode, data_path, transform=None):
+    def __init__(self, mode, data_path, imgsize=224, transform=None):
         self.data_path = data_path
         self.mode = mode
+        self.transform = transform
         self.dataset, self.num_classes = self.load_data()
         
         n = len(self.dataset)
@@ -257,7 +258,7 @@ class AppleBlightScratch(Dataset):
         boxes = torch.as_tensor(boxes, dtype=torch.float32)
         labels = torch.as_tensor(labels, dtype=torch.int64)
         image_id = torch.tensor([index])
-        area = (box[:, 3] - box[:, 1]) * (box[:, 2] - box[:, 0])
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
         iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
         
         target = {}
@@ -275,12 +276,12 @@ class AppleBlightScratch(Dataset):
     
     def load_data(self):
         # read ground truth json file
-        with open(os.path.join(self.data_path, 'ground-truth','new_gt_multi.json')) as f:
+        with open(os.path.join(self.data_path, 'groundtruth.json')) as f:
             data = json.load(f)
         
         filtered_data = [item for item in data if set(item['class_id']) in ({1}, {3}, {1, 3})]
         
-        label_mapping = {1: 0, 3: 1}
+        label_mapping = {1: 0, 3: 1}  # 1: Scratch, 3: Blight
         
         for data in filtered_data:
             data['class_id'] = [label_mapping[i] for i in data['class_id']]
@@ -290,6 +291,8 @@ class AppleBlightScratch(Dataset):
             unique_classes.update(data['class_id'])
         
         num_classes = len(unique_classes)
+        
+        random.Random(44).shuffle(filtered_data)
         
         return filtered_data, num_classes
     

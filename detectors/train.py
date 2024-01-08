@@ -4,7 +4,7 @@ from torchvision.utils import make_grid, draw_bounding_boxes, draw_segmentation_
 import torch.nn.functional as F
 from torch import nn
 from detector import WrappingDetector
-from detectors.utils import *
+from utils import *
 from pytorch_lightning import LightningModule, Trainer, LightningDataModule
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping
 from neptune.types import File
@@ -237,8 +237,8 @@ class Model(LightningModule):
         self.task = PARAMS['task']
         # Model selection
         self.model = WrappingDetector(model_configs=self.architect_settings)
-        self.train_metrics = MeanAveragePrecision()
-        self.valid_metrics = MeanAveragePrecision()
+        self.train_metrics = MeanAveragePrecision(class_metrics=True)
+        self.valid_metrics = MeanAveragePrecision(class_metrics=True)
      
         self.metrics_name = self.train_settings['metric']
 
@@ -327,6 +327,13 @@ class Model(LightningModule):
         loss =[outputs['loss'] for outputs in self.test_step_outputs]
         self.log('metrics/epoch/test_loss', sum(loss) / len(loss))
         self.log(f"metrics/epoch/test_{self.metrics_name}", self.valid_metrics.compute()['map'])
+        self.log(f"metrics/epoch/test_mAP50", self.valid_metrics.compute()['map_50'])
+        self.log(f"metrics/epoch/test_mAP75", self.valid_metrics.compute()['map_75'])
+
+        map_per_class = self.valid_metrics.compute()['map_per_class']
+        for i, value in enumerate(map_per_class):
+            self.log(f"metrics/epoch/test_mAP_per_class_{i}", value)  # Option 1: Looping with Enumerate
+
          
         self.test_step_outputs.clear()
         self.valid_metrics.reset()

@@ -240,6 +240,8 @@ class splitbase():
 
 if __name__ == '__main__':
     # example usage of ImgSplit
-    split = splitbase('/mnt/data/dataset/apple-defects/version-3/',
-                       '/mnt/data/dataset/apple-defects/version-4/')
-    split.splitdata(2)
+    split = splitbase('/mnt/data/dataset/apple-defects/train-test-split/val/',
+                       '/mnt/data/dataset/apple-defects/train-test-split/val-split/',
+                       gap=100,
+                       subsize=512)
+    split.splitdata(1)
