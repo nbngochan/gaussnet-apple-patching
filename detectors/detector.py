@@ -3,30 +3,35 @@ import torch.nn as nn
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.retinanet import RetinaNetHead
 from torchvision.models.detection.ssd import SSDHead
+from torchvision.models.detection.fcos import FCOSHead
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 from torchvision.models.detection import _utils
 from torchvision.models.detection import fasterrcnn_resnet50_fpn_v2, fasterrcnn_mobilenet_v3_large_fpn, fasterrcnn_resnet50_fpn, \
                                         retinanet_resnet50_fpn, retinanet_resnet50_fpn_v2, \
                                         ssd300_vgg16, ssdlite320_mobilenet_v3_large, \
-                                        maskrcnn_resnet50_fpn, maskrcnn_resnet50_fpn_v2
+                                        maskrcnn_resnet50_fpn, maskrcnn_resnet50_fpn_v2, \
+                                        fcos_resnet50_fpn
 
 from torchvision.models.detection import FasterRCNN_ResNet50_FPN_V2_Weights, FasterRCNN_ResNet50_FPN_Weights, FasterRCNN_MobileNet_V3_Large_FPN_Weights,\
                                         RetinaNet_ResNet50_FPN_Weights, RetinaNet_ResNet50_FPN_V2_Weights, \
                                         SSD300_VGG16_Weights, SSDLite320_MobileNet_V3_Large_Weights, \
-                                        MaskRCNN_ResNet50_FPN_V2_Weights, MaskRCNN_ResNet50_FPN_Weights
+                                        MaskRCNN_ResNet50_FPN_V2_Weights, MaskRCNN_ResNet50_FPN_Weights, \
+                                        FCOS_ResNet50_FPN_Weights
 
 MODEL = {
     "fasterrcnn-s": fasterrcnn_mobilenet_v3_large_fpn, "fasterrcnn-m": fasterrcnn_resnet50_fpn, "fasterrcnn-l": fasterrcnn_resnet50_fpn_v2,
     "retinanet-m": retinanet_resnet50_fpn, "retinanet-l": retinanet_resnet50_fpn_v2,
     "ssd-s": ssdlite320_mobilenet_v3_large, "ssd-m": ssd300_vgg16,
-
-    "maskrcnn-s": maskrcnn_resnet50_fpn, "maskrcnn-m": maskrcnn_resnet50_fpn_v2
+    "fcos": fcos_resnet50_fpn,
+    
+    "maskrcnn-s": maskrcnn_resnet50_fpn, "maskrcnn-m": maskrcnn_resnet50_fpn_v2,
 }
 
 WEIGHTS = {
     "fasterrcnn-s": FasterRCNN_MobileNet_V3_Large_FPN_Weights, "fasterrcnn-m": FasterRCNN_ResNet50_FPN_Weights, "fasterrcnn-l": FasterRCNN_ResNet50_FPN_V2_Weights,
     "retinanet-m": RetinaNet_ResNet50_FPN_Weights, "retinanet-l": RetinaNet_ResNet50_FPN_V2_Weights,
     "ssd-s": SSDLite320_MobileNet_V3_Large_Weights, "ssd-m": SSD300_VGG16_Weights,
+    "fcos": FCOS_ResNet50_FPN_Weights,
 
     "maskrcnn-s": MaskRCNN_ResNet50_FPN_Weights, "maskrcnn-m": MaskRCNN_ResNet50_FPN_V2_Weights
 }
@@ -86,6 +91,10 @@ class WrappingDetector(nn.Module):
                 num_ftrs = _utils.retrieve_out_channels(base_model.backbone, (320, 320))
                 num_anchors = base_model.anchor_generator.num_anchors_per_location()
                 base_model.head = SSDHead(num_ftrs, num_anchors, self.n_cls)
+            elif "fcos" in name:
+                num_ftrs = base_model.backbone.out_channels
+                num_anchors = base_model.anchor_generator.num_anchors_per_location()[0]
+                base_model.head = FCOSHead(num_ftrs, num_anchors, self.n_cls)
             elif "maskrcnn" in name:
                 num_ftrs = base_model.roi_heads.box_predictor.cls_score.in_features
                 base_model.roi_heads.box_predictor = FastRCNNPredictor(num_ftrs, self.n_cls)

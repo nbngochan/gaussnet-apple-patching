@@ -32,7 +32,7 @@ arg = parser.parse_args()
 print(arg)
 
 
-result_img_path = 'img-out-3/'
+result_img_path = 'img-out-240122/'
 if not os.path.exists(result_img_path):
     os.makedirs(result_img_path)
     
@@ -44,7 +44,7 @@ test_dataset = ListAppleDataset('valid', arg.dataset, arg.root,
                             arg.input_size, transform=None, evaluation=True)
    
 """Network Backbone"""
-NUM_CLASSES = {'version-1' : 2, 'version-2': 3, 'version-3': 2}
+NUM_CLASSES = {'version-1' : 2, 'version-2': 3, 'version-3': 2, 'split': 2}
 num_classes = NUM_CLASSES[arg.dataset]
 model = Model_factory(arg.backbone, num_classes)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -103,6 +103,9 @@ for idx in range(len(test_dataset)):
         
         if 'gaussnet' in arg.backbone:
             out = out[1]
+            
+        if 'hourglass' in arg.backbone:
+            out = out[0]
         
         out = smoothing(out, arg.kernel)
         peak = nms(out, arg.kernel)

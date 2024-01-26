@@ -25,31 +25,46 @@ class ListAppleDataset(Dataset):
     def __init__(self, mode, dataset, root, img_size=(512, 512), transform=None, evaluation=None):
         self.dataset = dataset
         self.mode = mode
-        self.root = root
         self.img_size = img_size
         self.transform = transform
         self.evaluation = evaluation
-        # self.data = []
-        
-        if self.dataset == 'version-1':
-            self.load_version_1()
-        elif self.dataset in ['version-2', 'version-3']:
+
+        if self.dataset == 'split':
+            self.data_folder = os.path.join(root, mode)
             self.load_version_2()
+            
+        if self.dataset == 'version-1':
+            self.data_folder = root
+            self.load_version_1()
+            
+            # splitting into training and validation set
+            n = len(self.data)
+        
+            random.Random(44).shuffle(self.data)  # random.shuffle is an in-place operation
+            if self.mode == 'train':
+                self.data = self.data[:int(n*0.8)]
+            
+            elif self.mode == 'valid':
+                self.data = self.data[int(n*0.8):]
+                
+        elif self.dataset in ['version-2', 'version-3']:
+            self.data_folder = root
+            self.load_version_2()
+            
+            # splitting into training and validation set
+            n = len(self.data)
+        
+            random.Random(44).shuffle(self.data)  # random.shuffle is an in-place operation
+            if self.mode == 'train':
+                self.data = self.data[:int(n*0.8)]
+            
+            elif self.mode == 'valid':
+                self.data = self.data[int(n*0.8):]
+        
         # else:
         #     raise ValueError(f'Dataset {self.dataset} not found.')
         
-        
-        # splitting into training and validation set
-        n = len(self.data)
-        
-        random.Random(44).shuffle(self.data)  # random.shuffle is an in-place operation
-        if self.mode == 'train':
-            self.data = self.data[:int(n*0.8)]
-        
-        elif self.mode == 'valid':
-            self.data = self.data[int(n*0.8):]
-        
-            
+
     def __len__(self):
         return len(self.data)
     
@@ -57,7 +72,7 @@ class ListAppleDataset(Dataset):
     def __getitem__(self, idx):
         if self.dataset == 'version-1':
             annotation, image_path, image = self.get_target(idx)
-        elif self.dataset in ['version-2', 'version-3']:
+        elif self.dataset in ['version-2', 'version-3', 'split']:
             annotation, image_path, image = self.get_target(self.data[idx])
         
         sum_size = 1
@@ -99,8 +114,8 @@ class ListAppleDataset(Dataset):
         return resize_img, resized_mask, resized_area
     
     
-    def load_version_1(self):
-        with open(os.path.join(self.root, 'groundtruth.json')) as f:
+    def load_version_1(self, data_folder):
+        with open(os.path.join(data_folder, 'groundtruth.json')) as f:
             data = json.load(f)
         
         filtered_data = [item for item in data if set(item['class_id']) in ({1}, {3}, {1, 3})]
@@ -118,16 +133,15 @@ class ListAppleDataset(Dataset):
         self.num_classes = len(num_class)
         self.data = filtered_data
 
-    
     def load_version_2(self):
         self.target_transform = None
-        self._anno_path = os.path.join(self.root, 'labelTxt', '%s.txt')
-        self._coco_imgpath = os.path.join(self.root, 'images', '%s.jpg')
+        self._anno_path = os.path.join(self.data_folder, 'labelTxt', '%s.txt')
+        self._coco_imgpath = os.path.join(self.data_folder, 'images', '%s.jpg')
 
-        dataset_list = os.path.join(self.root, 'image_list.txt')
+        dataset_list = os.path.join(self.data_folder, 'image_list.txt')
         dataset_list = open(dataset_list, "r")
 
-        annot_path = os.path.join(self.root, 'labelTxt')
+        annot_path = os.path.join(self.data_folder, 'labelTxt')
         annot_list = os.listdir(annot_path)
 
         missing_list = []
@@ -157,7 +171,7 @@ class ListAppleDataset(Dataset):
         if self.dataset == 'version-1':
             sample = self.data[idx]
             image_name = sample['name']
-            image_path = os.path.join(self.root, 'images', f'{image_name}.jpg')
+            image_path = os.path.join(self.data_folder, 'images', f'{image_name}.jpg')
             image = cv2.imread(image_path)[:,:,::-1]
             height, width, _ = image.shape
             
@@ -188,7 +202,7 @@ class ListAppleDataset(Dataset):
 
                 annotation.append([x1, y1, x2, y2, x3, y3, x4, y4, APPLE_CLASSES.index(class_name)])
             
-        if self.dataset in ['version-2', 'version-3']:
+        if self.dataset in ['version-2', 'version-3', 'split']:
             
             image_path = self._coco_imgpath % (idx)
             
@@ -220,13 +234,14 @@ if __name__ == '__main__':
 
     """For Apple Dataset"""
     transform_train = Transform(is_train=True, size=(512, 512))
-    appledata = ListAppleDataset(mode='valid',
-                                 dataset = 'version-3',
-                                 root='/mnt/data/dataset/apple-defects/version-3/',
+    appledata = ListAppleDataset(mode='train',
+                                 dataset = 'split',
+                                 root='/mnt/data/dataset/apple-defects/train-test-split/',
                                  img_size=(512, 512),
                                  transform=transform_train)
 
     apple_loader = DataLoader(appledata, batch_size=4, shuffle=True)
+    
     for batch in apple_loader:
         images, masks, areas, total_sizes = batch
         

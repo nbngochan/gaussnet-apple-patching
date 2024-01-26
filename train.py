@@ -23,12 +23,14 @@ seed_everything(44)
 def get_args():
     parser = argparse.ArgumentParser(description='Training Object Detection Module')
     parser.add_argument('--root', type=str, help='Root directory of dataset')
+    parser.add_argument('--mode_train', type=str, help='train/train-split')
+    parser.add_argument('--mode_valid', type=str, help='valid/valid-split')
     parser.add_argument('--dataset', type=str, default='apple_2', help='Training dataset')
     parser.add_argument('--input_size', type=int, default=512, help='Input size')
     parser.add_argument('--workers', default=4, type=int, help='Number of workers')
     parser.add_argument('--batch_size', type=int, default=4, help='Training batch size')
     parser.add_argument('--backbone', type=str, default='gaussnet_cascade', 
-                        help='[gaussnet_cascade, gaussnet]')
+                        help="['hourglass52', 'hourglass104', 'gaussnet', 'gaussnet_cascade_2layers', 'gaussnet_cascade', 'gaussnet_cascade_4layers']")
     parser.add_argument('--epochs', type=int, default=2, help='number of train epochs')
     parser.add_argument('--lr', type=float, default=2.5e-4, help='learning rate')
     parser.add_argument('--resume', default=None, type=str,  help='training restore')
@@ -44,12 +46,22 @@ def get_args():
     args = parser.parse_args()
     print(args)
     return args
+
+
+def parser():
+    parser = argparse.ArgumentParser(description='Training Apple Detection Module')
+    parser.add_argument(
+        '--config-file', '-c', type=str, required=True, help='path to config file'
+    )
+    
+    pass
     
 def main():
     args = get_args()
     
     if args.store_path is None:
-        args.store_path = './store'
+        # args.store_path = './store'
+        args.store_path = '/mnt/data/store'
     
     if not os.path.isdir(args.store_path):
         os.mkdir(args.store_path)
@@ -60,7 +72,7 @@ def main():
     # Set cuda device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    NUM_CLASSES = {'version-1' : 2, 'version-2': 3, 'version-3': 2}
+    NUM_CLASSES = {'version-1' : 2, 'version-2': 3, 'version-3': 2, 'split': 2}
     num_classes = NUM_CLASSES[args.dataset]
     
     # Check and load pretrained model
@@ -78,13 +90,13 @@ def main():
     
     """"Apple Dataset [NEW]"""
     # Training data loader
-    train_dataset = ListAppleDataset('train', args.dataset, args.root, 
+    train_dataset = ListAppleDataset(args.mode_train, args.dataset, args.root, 
                                  args.input_size, transform=transform_train)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, pin_memory=True)
     
     # Validation data loader
-    valid_dataset = ListAppleDataset('valid', args.dataset, args.root,
+    valid_dataset = ListAppleDataset(args.mode_valid, args.dataset, args.root,
                                 args.input_size, transform=transform_valid)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
                             num_workers=args.workers, pin_memory=True)
@@ -94,7 +106,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # define loss function (criterion) and optimizer
-    criterion = SWM_FPEM_Loss(num_classes=num_classes, alpha=args.alpha, neg_pos_ratio=0.3)
+    criterion = SWM_FPEM_Loss(num_classes=num_classes, alpha=args.alpha, neg_pos_ratio=0.4)
     
     # Set up summary writer
     current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
