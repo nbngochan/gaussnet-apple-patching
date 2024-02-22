@@ -6,13 +6,13 @@ import yaml
 import torch
 import datetime
 import torch.optim as optim
-
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from lightning_fabric.utilities.seed import seed_everything
 
 from basenet.model import Model_factory
 from loader import ListAppleDataset
-from loss import SWM_FPEM_Loss
+from loss import SWM_FPEM_Loss, FocalLoss, MSELoss, FocalLossV2
 from utils.lr_scheduler import WarmupPolyLR
 from utils.augmentations import Transform
 from torch.utils.tensorboard import SummaryWriter
@@ -30,18 +30,23 @@ def get_args():
     parser.add_argument('--workers', default=4, type=int, help='Number of workers')
     parser.add_argument('--batch_size', type=int, default=4, help='Training batch size')
     parser.add_argument('--backbone', type=str, default='gaussnet_cascade', 
-                        help="['hourglass52', 'hourglass104', 'gaussnet', 'gaussnet_cascade_2layers', 'gaussnet_cascade', 'gaussnet_cascade_4layers']")
+                        help="['hourglass52', 'hourglass104', 'gaussnet', \
+                        'gaussnet_cascade_2layers', 'gaussnet_cascade', 'gaussnet_cascade_4layers', \
+                        'hhrnet32', 'hhrnet48']")
     parser.add_argument('--epochs', type=int, default=2, help='number of train epochs')
     parser.add_argument('--lr', type=float, default=2.5e-4, help='learning rate')
     parser.add_argument('--resume', default=None, type=str,  help='training restore')
     parser.add_argument('--print_freq', default=64, type=int, help='interval of showing training conditions')
     parser.add_argument('--train_iter', default=1, type=int, help='number of total iterations for training')
     parser.add_argument('--curr_iter', default=1, type=int, help='current iteration')
+    parser.add_argument('--loss', type=str, default='SWM_FPEM', help='loss function')
     parser.add_argument('--alpha', type=float, default=0.8, help='weight for positive loss, default=0.5')
+    parser.add_argument('--gamma', type=float, default=2, help='focal loss gamma')
     parser.add_argument('--amp', action='store_true', help='half precision')
     parser.add_argument('--save_path', type=str, default='./weight', help='Model save path')
     parser.add_argument("--trained", default=None, help='Path to pre-trained model')
     parser.add_argument("--store_path", default=None, help='Path to save trained model')
+    
     
     args = parser.parse_args()
     print(args)
@@ -69,6 +74,7 @@ def main():
     if type(args.input_size) == int:
         args.input_size = (args.input_size, args.input_size)
     
+    out_size = (args.input_size[0] // 2, args.input_size[1] // 2)
     # Set cuda device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -84,20 +90,20 @@ def main():
     
     model = Model_factory(args.backbone, num_classes).to(device)
     
-    transform_train = Transform(is_train=True, size=args.input_size)
-    transform_valid = Transform(is_train=False, size=args.input_size)
+    transform_train = Transform(is_train=True, size=out_size)
+    transform_valid = Transform(is_train=False, size=out_size)
 
     
     """"Apple Dataset [NEW]"""
     # Training data loader
     train_dataset = ListAppleDataset(args.mode_train, args.dataset, args.root, 
-                                 args.input_size, transform=transform_train)
+                                 out_size, transform=transform_train)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                             num_workers=args.workers, pin_memory=True)
     
     # Validation data loader
     valid_dataset = ListAppleDataset(args.mode_valid, args.dataset, args.root,
-                                args.input_size, transform=transform_valid)
+                                out_size, transform=transform_valid)
     valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, shuffle=False,
                             num_workers=args.workers, pin_memory=True)
     
@@ -106,7 +112,17 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # define loss function (criterion) and optimizer
-    criterion = SWM_FPEM_Loss(num_classes=num_classes, alpha=args.alpha, neg_pos_ratio=0.4)
+    if args.loss == 'SWM_FPEM':
+        criterion = SWM_FPEM_Loss(num_classes=num_classes, alpha=args.alpha, neg_pos_ratio=0.4)
+    
+    elif args.loss == 'FocalLoss':
+        criterion = FocalLoss(num_classes=num_classes, gamma=args.gamma, alpha=args.alpha)
+        
+    elif args.loss == 'FocalLossV2':
+        criterion = FocalLossV2(num_classes=num_classes)
+    
+    elif args.loss == 'MSELoss':
+        criterion = MSELoss()
     
     # Set up summary writer
     current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -142,7 +158,7 @@ def main():
         
         # Validation phase
         val_loss, val_dist = validate(valid_loader=valid_loader, model=model, criterion=criterion,
-                                      device=device, epoch=epoch, summary_writer=summary_writer, log_dir=log_dir)
+                                      device=device, epoch=epoch, summary_writer=summary_writer, args=args, log_dir=log_dir)
         
         if best_loss >= val_loss:
             best_loss = val_loss
@@ -174,25 +190,41 @@ def train(train_loader, model, criterion, optimizer, scheduler, summary_writer, 
     for x, y, w, s in train_loader:
         
         args.curr_iter += 1
-        
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         w = w.to(device, non_blocking=True)
         s = s.to(device, non_blocking=True)
-
+        
+        x = F.interpolate(x, size=[y.shape[1]*2, y.shape[2]*2], mode='bilinear', align_corners=False)
+        
         outs = model(x)
+        
         with torch.cuda.amp.autocast(enabled=args.amp):
             if type(outs) == list:
                 loss = 0
                 for out in outs:
-                    loss += criterion(y, out, w, s)
+                    if args.loss == 'SWM_FPEM':
+                        loss += criterion(y, out, w, s)
+                    elif args.loss == 'FocalLoss':
+                        loss += criterion(out, y)
+                    elif args.loss == 'MSELoss':
+                        loss += criterion(y, out)
+                    elif args.loss == 'FocalLossV2':
+                        loss += criterion(y, out, w)
                     
                 loss /= len(outs)
                     
                 outs = outs[-1]
 
             else:
-                loss = criterion(y, outs, w, s)
+                if args.loss == 'SWM_FPEM':
+                    loss = criterion(y, outs, w, s)
+                elif args.loss == 'FocalLoss':
+                    loss = criterion(outs, y)
+                elif args.loss == 'MSELoss':
+                    loss = criterion(y, outs)
+                elif args.loss == 'FocalLossV2':
+                    loss = criterion(y, outs, w)
     
         # compute gradient and backward
         optimizer.zero_grad()
@@ -218,7 +250,7 @@ def train(train_loader, model, criterion, optimizer, scheduler, summary_writer, 
         
         summary_writer.add_scalars('Loss', {'training': losses.avg}, epoch)
 
-def validate(valid_loader, model, criterion, device, epoch, summary_writer, log_dir):
+def validate(valid_loader, model, criterion, device, epoch, summary_writer, args, log_dir):
     losses = AverageMeter()
     distances = AverageMeter()
     
@@ -231,7 +263,9 @@ def validate(valid_loader, model, criterion, device, epoch, summary_writer, log_
         y = y.to(device, non_blocking=True)
         w = w.to(device, non_blocking=True)
         s = s.to(device, non_blocking=True)
-
+        
+        x = F.interpolate(x, size=[y.shape[1]*2, y.shape[2]*2], mode='bilinear', align_corners=False)
+        
         # compute output
         with torch.no_grad():
             outs = model(x)
@@ -239,7 +273,14 @@ def validate(valid_loader, model, criterion, device, epoch, summary_writer, log_
             if type(outs) == list:
                 outs = outs[-1]
 
-            loss = criterion(y, outs, w, s)
+            if args.loss == 'SWM_FPEM':
+                loss = criterion(y, outs, w, s)
+            elif args.loss == 'FocalLoss':
+                loss = criterion(outs, y)
+            elif args.loss == 'MSELoss':
+                loss = criterion(y, outs)
+            elif args.loss == 'FocalLossV2':
+                loss = criterion(y, outs, w)
 
         # measure accuracy and record loss
         if len(y.shape) == 3:

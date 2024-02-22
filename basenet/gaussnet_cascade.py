@@ -9,6 +9,8 @@ import torch.nn.functional as F
 
 from basenet.extractor import Multi_Rotation_Convolution_Block_light
 from basenet.extractor import Modified_Multi_Rotation_Convolution_Block
+from basenet.extractor import Dilated_Multi_Rotation_Convolution_Block
+from basenet.extractor import SE_Multi_Convolution_Block
 
 def norm(out_dim, groups=0):
     if groups == 0:
@@ -89,7 +91,7 @@ def make_pool_layer(dim):
     return nn.Sequential()
 
 def make_unpool_layer(dim):
-    return nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+    return nn.Upsample(scale_factor=4, mode='bilinear', align_corners=False)
 
 def make_kp_layer(cnv_dim, curr_dim, out_dim):
     return nn.Sequential(
@@ -98,10 +100,18 @@ def make_kp_layer(cnv_dim, curr_dim, out_dim):
     )
 
 def make_MRCB_layer(curr_dim):
-    return nn.Sequential(
-        Modified_Multi_Rotation_Convolution_Block(curr_dim),
-    )
+    # return nn.Sequential(
+    #     Dilated_Multi_Rotation_Convolution_Block(curr_dim),
+    # )
 
+    # return nn.Sequential(
+    #     Modified_Multi_Rotation_Convolution_Block(curr_dim),
+    # )   
+    
+    return nn.Sequential(
+        SE_Multi_Convolution_Block(curr_dim),
+    ) 
+    
 def make_head_layer(curr_dim, out_dim):
     return nn.Sequential(
         nn.Conv2d(curr_dim, out_dim, (1, 1)),
@@ -266,7 +276,7 @@ class exkp(nn.Module):
 
 
         self.relu = nn.ReLU(inplace=True)
-        self.upsampling = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=False)
+        self.upsampling = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         
 
     def forward(self, image):
@@ -284,7 +294,7 @@ class exkp(nn.Module):
                 inter = self.inters_[ind](inter) + self.cnvs_[ind](cnv)
                 inter = self.relu(inter)
                 inter = self.inters[ind](inter)
-
+        
         ##################################################################
         mrcbs = []
         # features : 2
@@ -304,6 +314,8 @@ class exkp(nn.Module):
         Refinement of MAC
         """
         
+        
+        # Remove this part for testing
         for ind in range(self.cascade):
             mrcb_ = self.mrcbs[self.nstack+ind]
             connect_ = self.connects_[ind] # 1x1 conv
@@ -312,6 +324,9 @@ class exkp(nn.Module):
             mrcb = mrcb_(features[-1] + prev_mrcb)
             
             mrcbs.append(mrcb)
+        # ------------------------------ 
+            
+            
         # mrcb : 4
         heads = []
         for ind, mrbc in enumerate(mrcbs):
@@ -371,7 +386,7 @@ def StackedHourGlass(num_classes, num_stacks=2, cascade=2):
 if __name__ == '__main__':
     
     model = StackedHourGlass(15, cascade=2).cuda()
-    # import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     output = model(torch.randn(2, 3, 512, 512).cuda())
     print(output[-1].shape)
     

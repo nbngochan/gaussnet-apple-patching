@@ -99,7 +99,7 @@ class ListAppleDataset(Dataset):
         
         image, mask, area = self.annotation_transform(np.array(image), mask, area, self.img_size[1], self.img_size[1])
         
-        image = torch.from_numpy(np.array(image)).permute(2, 0, 1).float()
+        image = torch.from_numpy(np.array(image)).float().permute(2,0,1)
         mask = torch.from_numpy(mask.astype(np.float32))
         area = torch.from_numpy(area.astype(np.float32))
         sum_size = torch.from_numpy(np.array([sum_size], dtype=np.float32))
@@ -238,11 +238,13 @@ if __name__ == '__main__':
                                  dataset = 'split',
                                  root='/mnt/data/dataset/apple-defects/train-test-split/',
                                  img_size=(512, 512),
-                                 transform=transform_train)
+                                 transform=transform_train,
+                                 evaluation=False)
 
     apple_loader = DataLoader(appledata, batch_size=4, shuffle=True)
     
     for batch in apple_loader:
+        import pdb; pdb.set_trace()
         images, masks, areas, total_sizes = batch
         
         

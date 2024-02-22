@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from basenet.MRCB import Modified_Multi_Rotation_Convolution_Block
-from basenet.MRCB import Multi_Rotation_Convolution_Block_light
+from basenet.extractor import Modified_Multi_Rotation_Convolution_Block
+from basenet.extractor import Multi_Rotation_Convolution_Block_light
 
 def norm(out_dim, groups=0):
     if groups == 0:

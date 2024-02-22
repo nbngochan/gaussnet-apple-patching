@@ -100,7 +100,7 @@ for idx in range(len(test_dataset)):
         
         t1 = time.time()
         out = model(x)
-        
+        # import pdb; pdb.set_trace()
         if 'gaussnet' in arg.backbone:
             out = out[1]
             
@@ -206,7 +206,9 @@ for idx in range(len(test_dataset)):
     merge_out = cv2.resize(merge_out, (w, h))  # image with bounding box prediction
     binary = cv2.resize(binary, (w, h))  # binary image with thresholding
     
-    result_img = cv2.hconcat([_img_gt[:, :, ::-1], _img[:, :, ::-1], merge_out, binary])
+    # result_img = cv2.hconcat([_img_gt[:, :, ::-1], _img[:, :, ::-1], merge_out, binary])
+    
+    result_img = cv2.hconcat([_img_gt[:, :, ::-1], merge_out, _img[:, :, ::-1]])
 
     cv2.imwrite("%s/%s.jpg" % (result_img_path, image_name), result_img)
 
